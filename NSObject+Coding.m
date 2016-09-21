@@ -72,20 +72,47 @@
     [self copyValuesTo:object ignoreEmpty:NO];
 }
 
-// copia i valori delle proprietà uguali tra due oggetti
+// copy the values of the same property between the two objects (recursive)
 - (void)copyValuesTo:(id)object ignoreEmpty:(BOOL)ignore
 {
     unsigned int count = 0;
     unsigned int count_obj = 0;
+    
     objc_property_t *properties = class_copyPropertyList([self class], &count);
     objc_property_t *properties_obj = class_copyPropertyList([object class], &count_obj);
+    
     for (int i = 0; i < count; ++i) {
+        
         NSString *name = [NSString stringWithCString:property_getName(properties[i]) encoding:NSUTF8StringEncoding];
-        for (int c = 0; c < count_obj; c++) {
+        id origin = [self valueForKey:name];
+        
+        for (int c = 0; c < count_obj; c++)
+        {
             NSString *name_obj = [NSString stringWithCString:property_getName(properties_obj[c]) encoding:NSUTF8StringEncoding];
-            if ([name_obj isEqualToString:name] && (!ignore || (ignore && [self valueForKey:name] != nil))) {
-                if ([self valueForKey:name] != nil)
-                    [object setValue:[self valueForKey:name] forKey:name];
+            if ([name_obj isEqualToString:name] && (!ignore || (ignore && origin != nil)))
+            {
+                NSString *propertyAttributes = [[NSString alloc] initWithUTF8String:property_getAttributes(properties_obj[c])];
+                NSArray *propertyAttributeArray = [propertyAttributes componentsSeparatedByString:@","];
+                
+                BOOL isReadOnly = NO;
+                for (NSString *string in propertyAttributeArray) {
+                    isReadOnly = isReadOnly || [string isEqual:@"R"];
+                }
+                
+                if (!isReadOnly && origin != nil)
+                {
+                    if ([propertyAttributes hasPrefix:@"T@\""] && ![propertyAttributes hasPrefix:@"T@\"NS"] && ![propertyAttributes hasPrefix:@"T@\"UI"] ) {
+                        
+                        id new_obj = [[[origin class] alloc] init];
+                        
+                        [origin copyValuesTo:new_obj ignoreEmpty:ignore];
+                        [object setValue:new_obj forKey:name];
+                    } else {
+                        [object setValue:origin forKey:name];
+                    }
+                }
+                
+                
                 break;
             }
         }
